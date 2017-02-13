@@ -35,9 +35,10 @@ library(dummies)
 library(Hmisc)#for functions: imput,  bystats (returns a matrix with the sample size, number missing y, and fun(non-missing y)
 library(plyr) # data manipulation
 library("RColorBrewer")
-# library(car)#basic 3d graph
+library(caret)
 
 rm(list=ls())
+
 
 #load train and test file
 train_first<- read.csv("Train_Big.csv", na.strings = "NA")
@@ -65,6 +66,9 @@ Item_Type.na.combi<-c("Baking Goods","Breads","Breakfast","Canned","Dairy",
                       "Health and Hygiene","Household","Meat","Others","Seafood",
                       "Snack Foods","Soft Drinks","Starchy Foods")
 
+
+
+
 bystats(combi$Item_Weight, combi$Item_Type, 
         fun=function(x)c(Mean=mean(x),Median=median(x)))
   
@@ -81,11 +85,24 @@ g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(
 # Stacked bar plot
 g 
 
+#hypothesis: outlet_size is depend of outlet_location
 
-table(combi$Outlet_Size, combi$Outlet_Type)
 levels(combi$Outlet_Size)
-levels(combi$Outlet_Size)[1] <- "Other"
+levels(combi$Outlet_Size[which(combi$Outlet_Type=="Grocery Store")])[1] <- "Small"
 str(combi)
+
+combi %>%
+  filter(Outlet_Type== "Supermarket Type1")%>%
+  filter(Outlet_Location_Type== "Tier 2")%>%
+  filter(Outlet_Identifier!="7")
+levels(combi$Outlet_Size[which(combi$Outlet_Type=="Supermarket Type1")])[1] <- "Medium"
+str(combi) 
+
+combi$Outlet_Size=as.character(combi$Outlet_Size)
+combi$Outlet_Size=as.factor(combi$Outlet_Size)
+levels(combi$Outlet_Size)
+g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type))
+g 
 
 
 #Item_Visibility is equal to zero for some Item_Type. Let's repair this problem
@@ -109,7 +126,7 @@ df
 # fill by groups and change color manually
 bp <- ggplot(combi, aes(x=Outlet_Size, y=Item_Visibility))
 bp <- bp + geom_boxplot(aes(fill = Outlet_Size))
-bp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9","#99FF66"))
+bp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))#"#99FF66"))
 
 
 p <- ggplot(combi, aes(x=Outlet_Type, y=Item_Visibility))
@@ -131,13 +148,19 @@ bystats(combi$Item_Visibility, combi$Outlet_Type,
 combi$Item_Visibility <- imputeMedian(combi$Item_Visibility, combi$Outlet_Type, Outlet_Type.na.combi)
 summary(combi)
 
+combi$Outlet_Establishment_Year2<-1
+combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<1995]<-'1985-1994'
+combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<2005&combi$Outlet_Establishment_Year>=1995]<-'1995-2004'
+combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year>=2005]<-'2005-2009'
+summary(combi$Outlet_Establishment_Year2)
+
 # We’ll convert these categorical variables into numeric using one hot encoding.
 # #load library
 #library(dummies)
 
 #create a dummy data frame
 new_my_data <- dummy.data.frame(combi, names = c("Item_Fat_Content","Item_Type",
-                                                 "Outlet_Establishment_Year","Outlet_Size",
+                                                 "Outlet_Establishment_Year2","Outlet_Size",
                                                  "Outlet_Location_Type","Outlet_Type"))#"Outlet_Identifier"))
 str(new_my_data)
 
@@ -148,20 +171,43 @@ str(new_my_data)
 # split = sample.split(new_my_data, SplitRatio = 0.8)
 training_set = new_my_data[1:nrow(train),]
 test_set = new_my_data[-(1:nrow(train)),]
-activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier)) 
+activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year)) 
 # The package factoextra is used for the visualization of the principal
 # component analysis results factoextra can be installed as follow :
+install.packages(("FactoMineR"))
 library(factoextra)
-res.pca <- dudi.pca(activ_train, scannf = FALSE, nf = 5)
+library(FactoMineR)
+
+
+#Center and scale the data
+#activ_train.scaled <- scale(activ_train, center = TRUE, scale = TRUE)
+#activ_train<-activ_train.scaled
+res.pca <- PCA(activ_train, graph = FALSE)
+print(res.pca)
+
+eigenvalues <- res.pca$eig
+head(eigenvalues[, 1:2])
+
+fviz_screeplot(res.pca, ncp=15)
+
+fviz_pca_var(res.pca)
+# 1. Correlation matrix
+res.cor <- cor(activ_train)
+round(res.cor, 2)
+# 2. Calculate eigenvectors/eigenvalues
+res.eig <- eigen(res.cor)
+res.eig
+
+res.pca2 <- dudi.pca(activ_train, scannf = FALSE, nf = 10)
 #Returns a list of classes pca and dudi (see dudi) containing the used
 #information for computing the principal component analysis :
-summary(res.pca)
+summary(res.pca2)
 #eigenvalue
-eig.val <- get_eigenvalue(res.pca)
+eig.val <- get_eigenvalue(res.pca2)
 head(eig.val)
 #The function screeplot() can be used to represent the amount of inertia
 #(variance) associated with each principal component
-screeplot(res.pca, main ="Screeplot - Eigenvalues")
+screeplot(res.pca2, main ="Screeplot - Eigenvalues")
 #You can also customize the plot using the standard barplot() function.
 barplot(eig.val[, 2], names.arg=1:nrow(eig.val), 
         main = "Variances",
@@ -172,16 +218,16 @@ barplot(eig.val[, 2], names.arg=1:nrow(eig.val),
 lines(x = 1:nrow(eig.val), eig.val[, 2], 
       type="b", pch=19, col = "red")
 # Make the scree plot using the package factoextra
-fviz_screeplot(res.pca, ncp=10)
+fviz_screeplot(res.pca2, ncp=26)
 # The coordinates of the variables on the factor map are :
 # Column coordinates
-head(res.pca$co)
+head(res.pca2$co)
 # Graph of variables
-s.corcircle(res.pca$co)
+s.corcircle(res.pca2$co)
 ?s.corcircle()
-fviz_pca_var(res.pca, col.var="steelblue")+
-  theme_minimal()
-
+fviz_pca_var(res.pca2, col.var="cos2") +
+  scale_color_gradient2(low="white", mid="blue", 
+                        high="red", midpoint=0.4) + theme_minimal()
 
 # The squared coordinates of variables are called cos2. A high cos2 indicates a
 # good representation of the variable on the principal component. In this case
@@ -189,42 +235,47 @@ fviz_pca_var(res.pca, col.var="steelblue")+
 # circle. A low cos2 indicates that the variable is not perfectly represented by
 # the PCs. In this case the variable is close to the center of the circle. The
 # cos2 of the variables are :
-# relative contributions of columns
-inertia <- inertia.dudi(res.pca, row.inertia = TRUE,
-                        col.inertia = TRUE)
-var.cos2 <- abs(inertia$col.rel/10000)
-head(var.cos2)
-# squared coordinates
-head(res.pca$co^2)
+# # relative contributions of columns The contributions of variables in
+# accounting for the variability in a given principal component are (in
+# percentage) : (variable.cos2 * 100) / (total cos2 of the component)
+#Contributions of variables on PC1
+# The red dashed line on the graph below indicates the expected average
+# contribution. For a given component, an observation with a contribution larger
+# than this cutoff could be considered as important in contributing to the
+# component.
+fviz_contrib(res.pca, choice = "var", axes = 1)
 
-fviz_pca_var(res.pca, col.var="contrib")+
-  scale_color_gradient2(low="white", mid="blue", 
-                        high="red", midpoint=55) + theme_minimal()
-# The contributions can be printed in % as follow :
-# absolute contribution of columns
-var.contrib <- inertia$col.abs/100
-head(var.contrib)
+# Contributions of variables on PC2
+fviz_contrib(res.pca, choice = "var", axes = 2)
 
-# It provides a list of matrices containing all the results for the active
-# variables (coordinates, correlation between variables and axes, squared cosine
-# and contributions).
-var <- get_pca_var(res.pca)
-names(var)
-#Contributions of variables
-head(var$contrib)
+# Total contribution on PC1 and PC2
+fviz_contrib(res.pca, choice = "var", axes = 1:2)
+# Control variable colors using their contributions
+fviz_pca_var(res.pca, col.var="contrib")
+
+# Change the gradient color
 fviz_pca_var(res.pca, col.var="contrib") +
   scale_color_gradient2(low="white", mid="blue", 
-                        high="red", midpoint=50) + theme_minimal()
-# The most important variables for a given PC can be visualized using the
-# function fviz_pca_contrib()[factoextra package] : (factoextra >= 1.0.1 is
-# required)
-# Contributions of variables on PC1
-fviz_pca_contrib(res.pca, choice = "var", axes = 1)
-# Contributions of variables on PC2
-fviz_pca_contrib(res.pca, choice = "var", axes = 2)
+                        high="red", midpoint=6) + theme_minimal()
+
+#The function dimdesc()[in FactoMineR] can be used to identify the most
+#correlated variables with a given principal component.
+res.desc<-dimdesc(res.pca,axes=c(1,2),proba=0.05)
+
+# Description of dimension 1
+res.desc$Dim.1
+
+# Description of dimension 2
+res.desc$Dim.2
+
+
+
+
+?fviz_contrib()
+head(res.pca2)
 #The coordinates of the individuals on the factor maps can be extracted as follow :
 # The row coordinates
-head(res.pca$li)
+head(res.pca2$li)
 prin_comp <- prcomp(activ_train, scale. = T)
 names(prin_comp)
 prin_comp$center
@@ -250,3 +301,4 @@ plot(prop_varex, xlab = "Principal Component",
 plot(cumsum(prop_varex), xlab = "Principal Component",
      ylab = "Cumulative Proportion of Variance Explained",
      type = "b")
+
