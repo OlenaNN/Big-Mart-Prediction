@@ -347,5 +347,5 @@ control<-train$Item_Outlet_Sales[5524:8523]
 
 #check your solution 
 control.data <- data.frame(rpart.prediction, control)
-chisq.test(control.data)
-
+cov(control.data$rpart.prediction,control.data$control)
+?var()
