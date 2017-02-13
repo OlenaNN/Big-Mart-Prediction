@@ -36,6 +36,7 @@ library(Hmisc)#for functions: imput,  bystats (returns a matrix with the sample 
 library(plyr) # data manipulation
 library("RColorBrewer")
 library(caret)
+library(rattle)#fot tree visualization
 
 rm(list=ls())
 
@@ -152,8 +153,8 @@ combi$Outlet_Establishment_Year2<-1
 combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<1995]<-'1985-1994'
 combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<2005&combi$Outlet_Establishment_Year>=1995]<-'1995-2004'
 combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year>=2005]<-'2005-2009'
+as.factor(combi$Outlet_Establishment_Year2)
 summary(combi$Outlet_Establishment_Year2)
-
 # We’ll convert these categorical variables into numeric using one hot encoding.
 # #load library
 #library(dummies)
@@ -164,11 +165,8 @@ new_my_data <- dummy.data.frame(combi, names = c("Item_Fat_Content","Item_Type",
                                                  "Outlet_Location_Type","Outlet_Type"))#"Outlet_Identifier"))
 str(new_my_data)
 
-# Splitting the dataset into the Training set and Test set
-# if (!require("caTools")) install.packages("caTools")
-# library(caTools)
-# set.seed(123)
-# split = sample.split(new_my_data, SplitRatio = 0.8)
+
+tr_set<-subset(new_my_data,select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year))
 training_set = new_my_data[1:nrow(train),]
 test_set = new_my_data[-(1:nrow(train)),]
 activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year)) 
@@ -204,7 +202,8 @@ print(res.pca)
 eigenvalues <- res.pca$eig
 head(eigenvalues[, 1:2])
 
-fviz_screeplot(res.pca, ncp=15)
+fviz_screeplot(res.pca, ncp=30)
+
 
 fviz_pca_var(res.pca)
 # 1. Correlation matrix
@@ -259,16 +258,17 @@ fviz_pca_var(res.pca2, col.var="cos2") +
 # contribution. For a given component, an observation with a contribution larger
 # than this cutoff could be considered as important in contributing to the
 # component.
-fviz_contrib(res.pca, choice = "var", axes = 1)
-
+fviz_contrib(res.pca, choice = "var", axes = 1,font.tickslab=9)+
+  theme(axis.text.x = element_text(angle=50))
+?fviz_contrib()
 # Contributions of variables on PC2
-fviz_contrib(res.pca, choice = "var", axes = 2)
+fviz_contrib(res.pca, choice = "var", axes = 2,font.tickslab=9)
 
 # Total contribution on PC1 and PC2
-fviz_contrib(res.pca, choice = "var", axes = 1:2)
+fviz_contrib(res.pca, choice = "var", axes = 1:2,font.tickslab=9)
 # Control variable colors using their contributions
-fviz_pca_var(res.pca, col.var="contrib")
-
+fviz_pca_var(res.pca, col.var="contrib",font.tickslab=9)
+?fviz_pca_var()
 # Change the gradient color
 fviz_pca_var(res.pca, col.var="contrib") +
   scale_color_gradient2(low="white", mid="blue", 
@@ -303,6 +303,7 @@ prin_comp$rotation
 prin_comp$rotation[1:5,1:4]
 dim(prin_comp$x)
 biplot(prin_comp, scale = 0)
+?biplot()
 std_dev <- prin_comp$sdev
 #compute variance
 pr_var <- std_dev^2
@@ -317,4 +318,34 @@ plot(prop_varex, xlab = "Principal Component",
 plot(cumsum(prop_varex), xlab = "Principal Component",
      ylab = "Cumulative Proportion of Variance Explained",
      type = "b")
+
+train.data <- data.frame(Item_Outlet_Sales = train$Item_Outlet_Sales, prin_comp$x)
+
+# Splitting the dataset into the Training set2 and Test set2
+#we are interested in first 27 PCAs
+train.data2<-train.data[1:5523,1:28]
+test.data2<-training_set[5524:8523,]
+#run a decision tree
+# install.packages("rpart")
+library(rpart)
+rpart.model <- rpart(Item_Outlet_Sales ~ .,data = train.data2, method = "anova")
+rpart.model
+fancyRpartPlot(rpart.model)
+test.data <- predict(prin_comp, newdata = test.data2)
+test.data <- as.data.frame(test.data)
+
+#select the first 27 components
+test.data <- test.data[,1:27]
+#make prediction on test data
+rpart.prediction <- predict(rpart.model, test.data)
+str(rpart.prediction)
+summary(rpart.prediction)
+levels(rpart.prediction)
+rpart.prediction
+control<-train$Item_Outlet_Sales[5524:8523]
+
+
+#check your solution 
+control.data <- data.frame(rpart.prediction, control)
+chisq.test(control.data)
 
