@@ -177,7 +177,23 @@ activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier
 install.packages(("FactoMineR"))
 library(factoextra)
 library(FactoMineR)
+#The correlation between variables
+cor.mat <- round(cor(activ_train),2)
+head(cor.mat[, 1:6])
 
+# install.packages("corrplot")
+library("corrplot")
+?corrplot
+corrplot(cor.mat, type="upper", order="hclust", 
+         tl.col="black", tl.cex=0.5,tl.srt=85)
+
+#Make a scatter plot matrix showing the correlation coefficients 
+#between variables and the significance levels : the package PerformanceAnalytics 
+#is required.
+#install.packages("PerformanceAnalytics")
+#library("PerformanceAnalytics")
+#?chart.Correlation()
+#chart.Correlation(activ_train[, 1:6], histogram=TRUE, pch=30)
 
 #Center and scale the data
 #activ_train.scaled <- scale(activ_train, center = TRUE, scale = TRUE)
