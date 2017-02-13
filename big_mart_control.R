@@ -43,13 +43,8 @@ rm(list=ls())
 
 #load train and test file
 train_first<- read.csv("Train_Big.csv", na.strings = "NA")
-test_first <- read.csv("Test_Big.csv")
-train<-train_first
-test<-test_first
-summary(train)
-summary(test)
-test$Item_Outlet_Sales <- 1
-combi <- rbind(train, test)
+combi<-train_first
+test.control<-combi[5524:8523,]$Item_Outlet_Sales
 
 list(combi$Item_Identifier)
 levels(combi$Outlet_Identifier) = c(1:10)
@@ -82,9 +77,7 @@ combi$Item_Weight <- imputeMedian(combi$Item_Weight, combi$Item_Type, Item_Type.
 summary(combi)
 
 
-g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type)) 
-# Stacked bar plot
-g 
+
 
 #hypothesis: outlet_size is depend of outlet_location
 
@@ -102,8 +95,6 @@ str(combi)
 combi$Outlet_Size=as.character(combi$Outlet_Size)
 combi$Outlet_Size=as.factor(combi$Outlet_Size)
 levels(combi$Outlet_Size)
-g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type))
-g 
 
 
 #Item_Visibility is equal to zero for some Item_Type. Let's repair this problem
@@ -125,22 +116,7 @@ df
 
 
 # fill by groups and change color manually
-bp <- ggplot(combi, aes(x=Outlet_Size, y=Item_Visibility))
-bp <- bp + geom_boxplot(aes(fill = Outlet_Size))
-bp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))#"#99FF66"))
 
-
-p <- ggplot(combi, aes(x=Outlet_Type, y=Item_Visibility))
-p <- p + geom_boxplot(aes(fill = Outlet_Type))
-p+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9","#99FF66"))
-
-pp <- ggplot(combi, aes(x=Item_Type, y=Item_Visibility))
-pp <- pp + geom_boxplot(aes(fill = Item_Type))
-pp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9","#99FF66",
-                              "#B3E2CD", "#FDCDAC", "#CBD5E8", "#F4CAE4", 
-                              "#E6F5C9", "#FFF2AE", "#F1E2CC", "#CCCCCC",
-                              "#00FF00","#FFFF00","#FF3366","#000033"))
-#impute 0 with median 
 Outlet_Type.na.combi<-c("Grocery Store","Supermarket Type1","Supermarket Type2","Supermarket Type3")
 combi$Item_Visibility[ which( combi$Item_Visibility == 0 )] <- NA
 bystats(combi$Item_Visibility, combi$Outlet_Type, 
@@ -167,16 +143,16 @@ str(new_my_data)
 
 
 tr_set<-subset(new_my_data,select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year))
-training_set = new_my_data[1:nrow(train),]
-test_set = new_my_data[-(1:nrow(train)),]
-activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year)) 
+pca.train <- tr_set[1:5523,]
+pca.test <- tr_set[-(1:5523),]
+
 # The package factoextra is used for the visualization of the principal
 # component analysis results factoextra can be installed as follow :
 install.packages(("FactoMineR"))
 library(factoextra)
 library(FactoMineR)
 #The correlation between variables
-cor.mat <- round(cor(activ_train),2)
+cor.mat <- round(cor(tr_set),2)
 head(cor.mat[, 1:6])
 
 # install.packages("corrplot")
@@ -196,7 +172,7 @@ corrplot(cor.mat, type="upper", order="hclust",
 #Center and scale the data
 #activ_train.scaled <- scale(activ_train, center = TRUE, scale = TRUE)
 #activ_train<-activ_train.scaled
-res.pca <- PCA(activ_train, graph = FALSE)
+res.pca <- PCA(tr_set, graph = FALSE)
 print(res.pca)
 
 eigenvalues <- res.pca$eig
@@ -207,13 +183,13 @@ fviz_screeplot(res.pca, ncp=30)
 
 fviz_pca_var(res.pca)
 # 1. Correlation matrix
-res.cor <- cor(activ_train)
+res.cor <- cor(tr_set)
 round(res.cor, 2)
 # 2. Calculate eigenvectors/eigenvalues
 res.eig <- eigen(res.cor)
 res.eig
 
-res.pca2 <- dudi.pca(activ_train, scannf = FALSE, nf = 10)
+res.pca2 <- dudi.pca(tr_set, scannf = FALSE, nf = 10)
 #Returns a list of classes pca and dudi (see dudi) containing the used
 #information for computing the principal component analysis :
 summary(res.pca2)
@@ -292,7 +268,7 @@ head(res.pca2)
 #The coordinates of the individuals on the factor maps can be extracted as follow :
 # The row coordinates
 head(res.pca2$li)
-prin_comp <- prcomp(activ_train, scale. = T)
+prin_comp <- prcomp(tr_set, scale. = T)
 names(prin_comp)
 prin_comp$center
 
@@ -319,12 +295,12 @@ plot(cumsum(prop_varex), xlab = "Principal Component",
      ylab = "Cumulative Proportion of Variance Explained",
      type = "b")
 
-train.data <- data.frame(Item_Outlet_Sales = train$Item_Outlet_Sales, prin_comp$x)
+train.data <- data.frame(Item_Outlet_Sales = combi$Item_Outlet_Sales, prin_comp$x)
 
 # Splitting the dataset into the Training set2 and Test set2
 #we are interested in first 27 PCAs
 train.data2<-train.data[1:5523,1:28]
-test.data2<-training_set[5524:8523,]
+test.data2<-tr_set[5524:8523,]
 #run a decision tree
 # install.packages("rpart")
 library(rpart)
@@ -342,4 +318,8 @@ str(rpart.prediction)
 summary(rpart.prediction)
 levels(rpart.prediction)
 rpart.prediction
+
+#check your solution -fail!!!
+control.data <- data.frame(rpart.prediction, test.control)
+sqrt( sum( (control.data$rpart.prediction - control.data$test.control)^2 , na.rm = TRUE ) / nrow(control.data) )
 
