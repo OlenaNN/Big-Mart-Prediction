@@ -48,6 +48,7 @@ train<-train_first
 test<-test_first
 summary(train)
 summary(test)
+#Создаем столбец Item_Outlet_Sales в таблице с тестовыми данными из единиц
 test$Item_Outlet_Sales <- 1
 combi <- rbind(train, test)
 
@@ -55,10 +56,15 @@ list(combi$Item_Identifier)
 levels(combi$Outlet_Identifier) = c(1:10)
 list(combi$Item_Fat_Content)
 combi$Item_Fat_Content=as.character(combi$Item_Fat_Content)
-combi$Item_Fat_Content[combi$Item_Fat_Content=='low fat']<-'Low Fat'
-combi$Item_Fat_Content[combi$Item_Fat_Content=='LF']<-'Low Fat'
+combi$Item_Fat_Content[combi$Item_Fat_Content=='low fat']<-'LF'
+combi$Item_Fat_Content[combi$Item_Fat_Content=='Low Fat']<-'LF'
 combi$Item_Fat_Content[combi$Item_Fat_Content=='reg']<-'Regular'
 combi$Item_Fat_Content=as.factor(combi$Item_Fat_Content)
+# If you look at the Item_Identifier, i.e. the unique ID of each item, it starts
+# with either FD, DR or NC. If you see the categories, these look like being
+# Food, Drinks and Non-Consumables. So I’ve used the Item_Identifier variable to
+# create a new column
+
 levels(combi$Item_Fat_Content)
 #apply the impute function from the Hmisc package on a per-Item_Type basis 
 #to assign the median of the available Weight to the missing Weight(s). 
@@ -72,7 +78,7 @@ Item_Type.na.combi<-c("Baking Goods","Breads","Breakfast","Canned","Dairy",
 
 bystats(combi$Item_Weight, combi$Item_Type, 
         fun=function(x)c(Mean=mean(x),Median=median(x)))
-  
+?bystats()  
 imputeMedian <- function(impute.var, filter.var, var.levels) {
   for (v in var.levels) {
     impute.var[ which( filter.var == v)] <- impute(impute.var[ 
@@ -82,28 +88,21 @@ combi$Item_Weight <- imputeMedian(combi$Item_Weight, combi$Item_Type, Item_Type.
 summary(combi)
 
 
-g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type)) 
-# Stacked bar plot
-g 
+# g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type)) 
+# # Stacked bar plot
+# g 
 
 #hypothesis: outlet_size is depend of outlet_location
 
 levels(combi$Outlet_Size)
-levels(combi$Outlet_Size[which(combi$Outlet_Type=="Grocery Store")])[1] <- "Small"
-str(combi)
-
-combi %>%
-  filter(Outlet_Type== "Supermarket Type1")%>%
-  filter(Outlet_Location_Type== "Tier 2")%>%
-  filter(Outlet_Identifier!="7")
-levels(combi$Outlet_Size[which(combi$Outlet_Type=="Supermarket Type1")])[1] <- "Medium"
-str(combi) 
-
-combi$Outlet_Size=as.character(combi$Outlet_Size)
-combi$Outlet_Size=as.factor(combi$Outlet_Size)
+table(combi$Outlet_Size, combi$Outlet_Type)
 levels(combi$Outlet_Size)
-g <- ggplot(data=combi, aes(x=Outlet_Size, y=Item_Outlet_Sales))+geom_point(aes(color=Outlet_Type))
-g 
+levels(combi$Outlet_Size)[1] <- "Other"
+str(combi)
+levels(combi$Outlet_Size)
+
+
+
 
 
 #Item_Visibility is equal to zero for some Item_Type. Let's repair this problem
@@ -127,7 +126,7 @@ df
 # fill by groups and change color manually
 bp <- ggplot(combi, aes(x=Outlet_Size, y=Item_Visibility))
 bp <- bp + geom_boxplot(aes(fill = Outlet_Size))
-bp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"))#"#99FF66"))
+bp+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9", "#99FF66"))#"#99FF66"))
 
 
 p <- ggplot(combi, aes(x=Outlet_Type, y=Item_Visibility))
@@ -149,27 +148,21 @@ bystats(combi$Item_Visibility, combi$Outlet_Type,
 combi$Item_Visibility <- imputeMedian(combi$Item_Visibility, combi$Outlet_Type, Outlet_Type.na.combi)
 summary(combi)
 
-combi$Outlet_Establishment_Year2<-1
-combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<1995]<-'1985-1994'
-combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year<2005&combi$Outlet_Establishment_Year>=1995]<-'1995-2004'
-combi$Outlet_Establishment_Year2[combi$Outlet_Establishment_Year>=2005]<-'2005-2009'
-as.factor(combi$Outlet_Establishment_Year2)
-summary(combi$Outlet_Establishment_Year2)
 # We’ll convert these categorical variables into numeric using one hot encoding.
 # #load library
 #library(dummies)
 
 #create a dummy data frame
 new_my_data <- dummy.data.frame(combi, names = c("Item_Fat_Content","Item_Type",
-                                                 "Outlet_Establishment_Year2","Outlet_Size",
+                                                 "Outlet_Establishment_Year","Outlet_Size",
                                                  "Outlet_Location_Type","Outlet_Type"))#"Outlet_Identifier"))
 str(new_my_data)
 
 
-tr_set<-subset(new_my_data,select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year))
+#tr_set<-subset(new_my_data,select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier))
 training_set = new_my_data[1:nrow(train),]
 test_set = new_my_data[-(1:nrow(train)),]
-activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier,Outlet_Establishment_Year)) 
+activ_train<-subset(training_set, select = -c(Item_Outlet_Sales, Item_Identifier, Outlet_Identifier)) 
 # The package factoextra is used for the visualization of the principal
 # component analysis results factoextra can be installed as follow :
 install.packages(("FactoMineR"))
@@ -207,13 +200,13 @@ fviz_screeplot(res.pca, ncp=30)
 
 fviz_pca_var(res.pca)
 # 1. Correlation matrix
-res.cor <- cor(activ_train)
-round(res.cor, 2)
+#res.cor <- cor(activ_train)
+#round(res.cor, 2)
 # 2. Calculate eigenvectors/eigenvalues
-res.eig <- eigen(res.cor)
-res.eig
+#res.eig <- eigen(res.cor)
+#res.eig
 
-res.pca2 <- dudi.pca(activ_train, scannf = FALSE, nf = 10)
+res.pca2 <- dudi.pca(activ_train, scannf = FALSE, nf = 25)
 #Returns a list of classes pca and dudi (see dudi) containing the used
 #information for computing the principal component analysis :
 summary(res.pca2)
@@ -224,14 +217,14 @@ head(eig.val)
 #(variance) associated with each principal component
 screeplot(res.pca2, main ="Screeplot - Eigenvalues")
 #You can also customize the plot using the standard barplot() function.
-barplot(eig.val[, 2], names.arg=1:nrow(eig.val), 
-        main = "Variances",
-        xlab = "Principal Components",
-        ylab = "Percentage of variances",
-        col ="steelblue")
+#barplot(eig.val[, 2], names.arg=1:nrow(eig.val), 
+        # main = "Variances",
+        # xlab = "Principal Components",
+        # ylab = "Percentage of variances",
+        # col ="steelblue")
 # Add connected line segments to the plot
-lines(x = 1:nrow(eig.val), eig.val[, 2], 
-      type="b", pch=19, col = "red")
+# lines(x = 1:nrow(eig.val), eig.val[, 2], 
+#       type="b", pch=19, col = "red")
 # Make the scree plot using the package factoextra
 fviz_screeplot(res.pca2, ncp=26)
 # The coordinates of the variables on the factor map are :
@@ -267,12 +260,12 @@ fviz_contrib(res.pca, choice = "var", axes = 2,font.tickslab=9)
 # Total contribution on PC1 and PC2
 fviz_contrib(res.pca, choice = "var", axes = 1:2,font.tickslab=9)
 # Control variable colors using their contributions
-fviz_pca_var(res.pca, col.var="contrib",font.tickslab=9)
-?fviz_pca_var()
+#fviz_pca_var(res.pca, col.var="contrib",font.tickslab=9)
+#fviz_pca_var()
 # Change the gradient color
-fviz_pca_var(res.pca, col.var="contrib") +
-  scale_color_gradient2(low="white", mid="blue", 
-                        high="red", midpoint=6) + theme_minimal()
+#fviz_pca_var(res.pca, col.var="contrib") +
+  # scale_color_gradient2(low="white", mid="blue", 
+  #                       high="red", midpoint=6) + theme_minimal()
 
 #The function dimdesc()[in FactoMineR] can be used to identify the most
 #correlated variables with a given principal component.
@@ -302,8 +295,8 @@ prin_comp$scale
 prin_comp$rotation
 prin_comp$rotation[1:5,1:4]
 dim(prin_comp$x)
-biplot(prin_comp, scale = 0)
-?biplot()
+# biplot(prin_comp, scale = 0)
+# biplot()
 std_dev <- prin_comp$sdev
 #compute variance
 pr_var <- std_dev^2
@@ -326,7 +319,7 @@ train.data <- data.frame(Item_Outlet_Sales = train$Item_Outlet_Sales, prin_comp$
 train.data2<-train.data[1:5523,1:28]
 test.data2<-training_set[5524:8523,]
 #run a decision tree
-# install.packages("rpart")
+install.packages("rpart")
 library(rpart)
 rpart.model <- rpart(Item_Outlet_Sales ~ .,data = train.data2, method = "anova")
 rpart.model
@@ -341,5 +334,6 @@ rpart.prediction <- predict(rpart.model, test.data)
 str(rpart.prediction)
 summary(rpart.prediction)
 levels(rpart.prediction)
-rpart.prediction
-
+tr<-training_set[5524:8523,]
+tr$rp<-rpart.prediction
+sqrt( sum( (tr$Item_Outlet_Sales - tr$rp)^2 , na.rm = TRUE ) / nrow(tr) )
